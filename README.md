@@ -13,6 +13,20 @@
 </div>
 </h1>
 
+> [!NOTE]
+> **Unofficial fork — Sable 2.0.5 (NeoForge 1.21.1) with [ScalableLux](https://github.com/RelativityMC/ScalableLux) compatibility.**
+> Not affiliated with or supported by the Sable developers; do not report issues from this build upstream.
+> Based on [ryanhcode/sable](https://github.com/ryanhcode/sable) tag `mc1.21.1-2.0.5-neoforge`, licensed under the PolyForm Shield License 1.0.0 (see `LICENSE.md`).
+>
+> Changes:
+> - removed the `scalablelux` incompatibility from `neoforge.mods.toml` / `fabric.mod.json`;
+> - plot (sub-level) light engines take their block/sky layers from the constructor arguments instead of the vanilla `blockEngine`/`skyEngine` fields, which ScalableLux sets to `null`;
+> - with ScalableLux, plot chunks are lit through ScalableLux's own chunk lighting (vanilla `propagateLightSources` is a no-op there) and are relit on load;
+> - with ScalableLux, its light interface resolves plot chunks on the server, so light values and chunk/light packets for sub-levels are correct;
+> - the client chunk packet mixin runs after ScalableLux's (priority 1002).
+>
+> Download the jar from the [Releases](../../releases) page or the latest Actions run.
+
 <p>Sable is an intrusive library mod for Minecraft that adds my take on interactive moving block structures, called "sub-levels". Sub-levels contain normal Minecraft chunks, entities, and block-entities, but exist at a separate dynamic position and orientation within Minecraft levels. My goal is to maximize compatibility, performance, and immersion of interacting with sub-levels, as simply as possible.</p>
 
 ### Compatibility Warning

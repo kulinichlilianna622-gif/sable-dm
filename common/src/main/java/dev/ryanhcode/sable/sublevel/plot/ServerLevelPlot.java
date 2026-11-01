@@ -9,6 +9,8 @@ import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.index.SableTags;
+import dev.ryanhcode.sable.mixinterface.compatibility.scalablelux.StarLightInterfaceExtension;
+import dev.ryanhcode.sable.mixinterface.plot.lighting.LevelLightEngineExtension;
 import dev.ryanhcode.sable.mixinterface.plot.serialization.LevelChunkTicksExtension;
 import dev.ryanhcode.sable.platform.SableChunkEventPlatform;
 import dev.ryanhcode.sable.platform.SablePlotPlatform;
@@ -50,6 +52,7 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.ticks.LevelChunkTicks;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -91,9 +94,17 @@ public class ServerLevelPlot extends LevelPlot {
         super(plotContainer, x, z, logSize, subLevel);
 
         final Level level = subLevel.getLevel();
-        final LevelLightEngine parentLightEngine = level.getLightEngine();
+        // Light engine replacements (ScalableLux) null out blockEngine / skyEngine, so use the captured constructor arguments
+        final LevelLightEngineExtension parentLightEngine = (LevelLightEngineExtension) level.getLightEngine();
         final ChunkSource chunkSource = level.getChunkSource();
-        this.lightEngine = new LevelLightEngine(chunkSource, parentLightEngine.blockEngine != null, parentLightEngine.skyEngine != null);
+        this.lightEngine = new LevelLightEngine(chunkSource, parentLightEngine.sable$hasBlockLight(), parentLightEngine.sable$hasSkyLight());
+    }
+
+    /**
+     * @return the ScalableLux light interface of this plot's light engine, or null if ScalableLux is not installed
+     */
+    private @Nullable StarLightInterfaceExtension getStarLight() {
+        return ((LevelLightEngineExtension) this.lightEngine).sable$getStarLight();
     }
 
     /**
@@ -160,15 +171,22 @@ public class ServerLevelPlot extends LevelPlot {
         // Should we be calling this extension?
         serverLevel.unload(levelChunk);
 
-        this.lightEngine.retainData(pos, false);
-        this.lightEngine.setLightEnabled(pos, false);
-        for (int idx = this.lightEngine.getMinLightSection(); idx < this.lightEngine.getMaxLightSection(); idx++) {
-            this.lightEngine.queueSectionData(LightLayer.BLOCK, SectionPos.of(pos, idx), null);
-            this.lightEngine.queueSectionData(LightLayer.SKY, SectionPos.of(pos, idx), null);
-        }
+        final StarLightInterfaceExtension starLight = this.getStarLight();
+        if (starLight != null) {
+            // ScalableLux keeps light inside the chunk, so there is no light storage to clear. Just drop pending work.
+            this.lightEngine.setLightEnabled(pos, false);
+            starLight.sable$removeChunkTasks(pos);
+        } else {
+            this.lightEngine.retainData(pos, false);
+            this.lightEngine.setLightEnabled(pos, false);
+            for (int idx = this.lightEngine.getMinLightSection(); idx < this.lightEngine.getMaxLightSection(); idx++) {
+                this.lightEngine.queueSectionData(LightLayer.BLOCK, SectionPos.of(pos, idx), null);
+                this.lightEngine.queueSectionData(LightLayer.SKY, SectionPos.of(pos, idx), null);
+            }
 
-        for (int idx = serverLevel.getMinSection(); idx < serverLevel.getMaxSection(); idx++) {
-            this.lightEngine.updateSectionStatus(SectionPos.of(pos, idx), true);
+            for (int idx = serverLevel.getMinSection(); idx < serverLevel.getMaxSection(); idx++) {
+                this.lightEngine.updateSectionStatus(SectionPos.of(pos, idx), true);
+            }
         }
 
         serverLevel.entityManager.updateChunkStatus(pos, FullChunkStatus.INACCESSIBLE);
@@ -205,6 +223,16 @@ public class ServerLevelPlot extends LevelPlot {
     }
 
     private void lightChunk(final LevelChunk chunk) {
+        final StarLightInterfaceExtension starLight = this.getStarLight();
+        if (starLight != null) {
+            // ScalableLux ignores propagateLightSources / queueSectionData, so light the chunk the way ScalableLux
+            // lights freshly generated chunks. Saved vanilla light data is not used, the plot is relit on load.
+            chunk.setLightCorrect(false);
+            starLight.sable$lightChunk(chunk);
+            chunk.setLightCorrect(true);
+            return;
+        }
+
         chunk.initializeLightSources();
         this.initializeLight(chunk);
         this.correctLight(chunk);
@@ -477,8 +505,9 @@ public class ServerLevelPlot extends LevelPlot {
 
                 final SectionPos sectionPos = SectionPos.of(global, level.getSectionYFromSectionIndex(yIndex));
 
-                final boolean hasBlockLight = this.lightEngine.blockEngine != null && sectionTag.contains("BlockLight", Tag.TAG_BYTE_ARRAY);
-                final boolean hasSkyLight = this.lightEngine.skyEngine != null && level.dimensionType().hasSkyLight() && sectionTag.contains("SkyLight", Tag.TAG_BYTE_ARRAY);
+                final LevelLightEngineExtension lightExtension = (LevelLightEngineExtension) this.lightEngine;
+                final boolean hasBlockLight = lightExtension.sable$hasBlockLight() && sectionTag.contains("BlockLight", Tag.TAG_BYTE_ARRAY);
+                final boolean hasSkyLight = lightExtension.sable$hasSkyLight() && level.dimensionType().hasSkyLight() && sectionTag.contains("SkyLight", Tag.TAG_BYTE_ARRAY);
                 if (hasBlockLight || hasSkyLight) {
                     if (!hasLit) {
                         this.lightEngine.retainData(global, true);
