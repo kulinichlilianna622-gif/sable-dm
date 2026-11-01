@@ -62,3 +62,53 @@ jobs:
               --target "$GITHUB_SHA"
           fi
           gh release upload "$TAG" "$JAR" --clobber
+
+  gametest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        light: [ vanilla, scalablelux ]
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :neoforge:build
+
+      - name: Download ScalableLux
+        if: matrix.light == 'scalablelux'
+        run: |
+          mkdir -p neoforge/build/gametest/mods
+          # Same file as ScalableLux-0.1.0.1+neoforge.1cb1e91 (looked up by SHA-1), latest 1.21.1 NeoForge build as fallback
+          URL=$(curl -sSf "https://api.modrinth.com/v2/version_file/d087823f3aec9e1ba5d8ec9b2888c35f95c06d4e?algorithm=sha1" | jq -r '.files[] | select(.hashes.sha1=="d087823f3aec9e1ba5d8ec9b2888c35f95c06d4e") | .url' || true)
+          if [ -z "$URL" ]; then
+            URL=$(curl -sSf 'https://api.modrinth.com/v2/project/scalablelux/version?loaders=%5B%22neoforge%22%5D&game_versions=%5B%221.21.1%22%5D' | jq -r '.[0].files[0].url')
+          fi
+          echo "ScalableLux: $URL"
+          curl -sSfL "$URL" -o neoforge/build/gametest/mods/scalablelux.jar
+          sha1sum neoforge/build/gametest/mods/scalablelux.jar
+
+      - name: Run game tests
+        run: |
+          set -o pipefail
+          ./gradlew :neoforge:runGameTest 2>&1 | tee gametest.log
+
+      - name: Verify lighting test
+        if: always()
+        run: |
+          EXPECTED="ScalableLux=$([ '${{ matrix.light }}' = 'scalablelux' ] && echo true || echo false)"
+          grep -i "scalablelux" gametest.log | grep -iv "sable" | head -5 || true
+          grep "\[sable-dm\]" gametest.log || true
+          grep -q "\[sable-dm\] Plot lighting test passed ($EXPECTED)" gametest.log
