@@ -31,7 +31,7 @@ import static dev.ryanhcode.sable.neoforge.gametest.SableTestHelper.spawnSubLeve
 @PrefixGameTestTemplate(false)
 public final class LightingTest {
 
-    @GameTest(template = "physicstest.continuouscollision", timeoutTicks = 100)
+    @GameTest(template = "physicstest.continuouscollision", timeoutTicks = 100, batch = "sable_dm_lighting")
     public static void testPlotLighting(final GameTestHelper helper) {
         final ServerLevel level = helper.getLevel();
         final ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
