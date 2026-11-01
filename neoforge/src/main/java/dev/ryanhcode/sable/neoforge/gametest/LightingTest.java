@@ -41,11 +41,9 @@ public final class LightingTest {
 
         final boolean scalableLux = ModList.get().isLoaded("scalablelux");
         final BlockPos light = BlockPos.ZERO;
-        final BlockPos roof = new BlockPos(4, 3, 0);
 
         final ServerSubLevel subLevel = spawnSubLevel(container, absolutePosition(helper, new Vector3d(2.5, 4, 1.5)), accessor -> {
             accessor.setBlock(light, Blocks.GLOWSTONE.defaultBlockState(), 3);
-            accessor.setBlock(roof, Blocks.STONE.defaultBlockState(), 3);
         });
 
         final LevelPlot plot = subLevel.getPlot();
@@ -55,7 +53,7 @@ public final class LightingTest {
             final LevelLightEngine engine = plot.getLightEngine();
             final LevelLightEngineExtension extension = (LevelLightEngineExtension) engine;
 
-            final String error = check(level, engine, extension, scalableLux, center.offset(light).east(), center.offset(roof).below());
+            final String error = check(level, engine, extension, scalableLux, center.offset(light).east(), center.offset(light).below());
             removeSubLevel(container, subLevel);
 
             if (error != null) {
@@ -88,24 +86,33 @@ public final class LightingTest {
             return "expected level block brightness 14 next to glowstone, got " + levelBlockLight;
         }
 
-        if (level.dimensionType().hasSkyLight() && !extension.sable$hasSkyLight()) {
-            return "plot light engine has no sky light";
+        if (level.dimensionType().hasSkyLight()) {
+            if (!extension.sable$hasSkyLight()) {
+                return "plot light engine has no sky light";
+            }
+
+            final int shadedSkyLight = engine.getLayerListener(LightLayer.SKY).getLightValue(shadedPos);
+            if (shadedSkyLight != 14) {
+                return "expected sky light 14 below glowstone, got " + shadedSkyLight;
+            }
+
+            final int openSkyLight = engine.getLayerListener(LightLayer.SKY).getLightValue(shadedPos.above(8));
+            if (openSkyLight != 15) {
+                return "expected sky light 15 above glowstone, got " + openSkyLight;
+            }
         }
 
         final ClientboundLightUpdatePacketData packet = new ClientboundLightUpdatePacketData(new ChunkPos(litPos), engine, null, null);
 
-        // Informational: sky light inside plots, logged so vanilla and ScalableLux runs can be compared
-        Sable.LOGGER.info("[sable-dm] ScalableLux={} sky: below roof={}, below glowstone={}, open={}, roof block={}; block: lit={}; packet block mask={} sky mask={} empty sky mask={}",
-                scalableLux,
-                engine.getLayerListener(LightLayer.SKY).getLightValue(shadedPos),
-                engine.getLayerListener(LightLayer.SKY).getLightValue(litPos.west().below()),
-                engine.getLayerListener(LightLayer.SKY).getLightValue(litPos.west().above(6)),
-                level.getBlockState(shadedPos.above()).getBlock(),
-                engine.getLayerListener(LightLayer.BLOCK).getLightValue(litPos),
-                packet.getBlockYMask(), packet.getSkyYMask(), packet.getEmptySkyYMask());
+        Sable.LOGGER.info("[sable-dm] ScalableLux={} packet block mask={} sky mask={} empty sky mask={}",
+                scalableLux, packet.getBlockYMask(), packet.getSkyYMask(), packet.getEmptySkyYMask());
 
         if (packet.getBlockYMask().isEmpty()) {
             return "light packet for the plot chunk has no block light";
+        }
+
+        if (level.dimensionType().hasSkyLight() && packet.getSkyYMask().isEmpty()) {
+            return "light packet for the plot chunk has no sky light";
         }
 
         return null;
