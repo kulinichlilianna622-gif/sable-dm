@@ -21,7 +21,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import org.joml.Vector3d;
 
 import static dev.ryanhcode.sable.neoforge.gametest.SableTestHelper.absolutePosition;
-import static dev.ryanhcode.sable.neoforge.gametest.SableTestHelper.removeSubLevel;
 import static dev.ryanhcode.sable.neoforge.gametest.SableTestHelper.spawnSubLevel;
 
 /**
@@ -31,7 +30,7 @@ import static dev.ryanhcode.sable.neoforge.gametest.SableTestHelper.spawnSubLeve
 @PrefixGameTestTemplate(false)
 public final class LightingTest {
 
-    @GameTest(template = "physicstest.continuouscollision", timeoutTicks = 100, batch = "sable_dm_lighting")
+    @GameTest(template = "physicstest.continuouscollision", timeoutTicks = 100)
     public static void testPlotLighting(final GameTestHelper helper) {
         final ServerLevel level = helper.getLevel();
         final ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
@@ -54,7 +53,6 @@ public final class LightingTest {
             final LevelLightEngineExtension extension = (LevelLightEngineExtension) engine;
 
             final String error = check(level, engine, extension, scalableLux, center.offset(light).east(), center.offset(light).below());
-            removeSubLevel(container, subLevel);
 
             if (error != null) {
                 helper.fail("Plot lighting (ScalableLux=" + scalableLux + "): " + error);
